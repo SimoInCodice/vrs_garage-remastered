@@ -1,40 +1,45 @@
-ESX = exports['es_extended']:getSharedObject()
+local QBCore = exports['qb-core']:GetCoreObject()
+local bank = exports['Renewed-Banking']
 lib.locale()
 lib.versionCheck('gabovrs/vrs_garage')
 
 lib.callback.register('vrs_garage:checkOwner', function(source, plate)
     local plate = string.gsub(plate, ' ', '')
-    local result = CustomSQL('query', 'SELECT owner FROM owned_vehicles WHERE REPLACE(plate, " ", "") = ?', {plate})
+    local result = CustomSQL('query', 'SELECT citizenid FROM player_vehicles WHERE REPLACE(plate, " ", "") = ?', {plate})
     if #result > 0 then
-        return result[1].owner
+        return result[1].citizenid
     end
 end)
 
 lib.callback.register('vrs_garage:getVehicles', function(source, job, type)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
+    print('Callback getVehicles called with job:', job, 'and type:', type)
+    QBCore.Debug(source, job, type)
+    local player = QBCore.Functions.GetPlayer(source)
+    QBCore.Debug(player)
+    local citizenId = player.PlayerData.citizenid
     local result
     if job then
-        result = CustomSQL('query', 'SELECT * FROM owned_vehicles WHERE owner = ? and job = ? and type = ? ORDER BY stored DESC',
-            {identifier, job, type})
+        result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE citizenid = ? and job = ? and type = ? ORDER BY stored DESC',
+            {citizenId, job, type})
     else
-        result = CustomSQL('query', 'SELECT * FROM owned_vehicles WHERE owner = ? and type = ? ORDER BY stored DESC', {identifier, type})
+        result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE citizenid = ? and type = ? ORDER BY stored DESC', {citizenId, type})
     end
     return result
 end)
 
 lib.callback.register('vrs_garage:getImpoundedVehicles', function(source, type)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
-    local result = CustomSQL('query', 'SELECT * FROM owned_vehicles WHERE owner = ? and impound = 1 and type = ?', {identifier, type})
+    local player = QBCore.Functions.GetPlayer(source)
+    local citizenId = player.PlayerData.citizenid
+    local result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE citizenid = ? and impound = 1 and type = ?', {citizenId, type})
     return result
 end)
 
 lib.callback.register('vrs_garage:canPay', function(source, amount)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local PlayerMoney = xPlayer.getMoney() -- Get the Current Player`s Balance.
-    if PlayerMoney >= amount then -- check if the Player`s Money is more or equal to the cost.
-        xPlayer.removeMoney(amount) -- remove Cost from balance
+    local player = QBCore.Functions.GetPlayer(source)
+    local citizenId = player.PlayerData.citizenid
+    local playerMoney = bank:getAccountMoney(citizenId) -- Get the Current Player`s Balance.
+    if playerMoney >= amount then -- check if the Player`s Money is more or equal to the cost.
+        bank:removeAccountMoney(citizenId, amount) -- remove Cost from balance
         return true
     else
         return false
@@ -43,49 +48,94 @@ end)
 
 lib.callback.register('vrs_garage:getVehicle', function(source, plate)
     local plate = string.gsub(plate, ' ', '')
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
-    local result = CustomSQL('query', 'SELECT * FROM owned_vehicles WHERE REPLACE(plate, " ", "") = ? and owner = ?', {plate, identifier})
+    local player = QBCore.Functions.GetPlayer(source)
+    local citizenId = player.PlayerData.citizenid
+    local result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE REPLACE(plate, " ", "") = ? and citizenid = ?', {plate, citizenId})
     return result[1]
 end)
 
-RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, parking, stored)
-    local plate = string.gsub(plate, ' ', '')
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
-    CustomSQL('update', 'UPDATE owned_vehicles SET vehicle = ?, parking = ?, stored = ? WHERE REPLACE(plate, " ", "") = ? and owner = ?',
-        {vehicle, parking, stored, plate, identifier})
+RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, garage)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    -- pulizia targa
+    local cleanPlate = string.gsub(plate, '%s+', '')
+
+    -- dati veicolo
+    local fuel = math.ceil(vehicle.fuelLevel or 0)
+    local engine = vehicle.engineHealth or 1000.0
+    local body = vehicle.bodyHealth or 1000.0
+
+    -- 🔥 mods complete
+    local mods = json.encode(vehicle)
+
+    CustomSql('update', [[
+        UPDATE player_vehicles 
+        SET garage = ?, fuel = ?, engine = ?, body = ?, mods = ?
+        WHERE REPLACE(plate, ' ', '') = ? AND citizenid = ?
+    ]], {
+        garage,
+        fuel,
+        engine,
+        body,
+        mods,
+        cleanPlate,
+        citizenid
+    })
 end)
 
-RegisterServerEvent('vrs_garage:buyVehicle', function(plate, vehicle, parking, job)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
-    CustomSQL('insert',
-        'INSERT INTO owned_vehicles (owner, plate, vehicle, type, stored, parking, impound, job) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        {identifier, plate, json.encode(vehicle), 'car', 1, parking, 0, job})
+RegisterServerEvent('vrs_garage:buyVehicle', function(plate, vehicle, garage, job)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    local cleanPlate = string.gsub(plate, '%s+', '')
+
+    local props = json.encode(vehicle)
+
+    CustomSql('insert', [[
+        INSERT INTO player_vehicles 
+        (citizenid, vehicle, plate, mods, garage, state, fuel, engine, body)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ]], {
+        citizenid,
+        vehicle.model,
+        cleanPlate,
+        props,
+        garage,
+        1, -- in garage
+        vehicle.fuelLevel or 100,
+        vehicle.engineHealth or 1000,
+        vehicle.bodyHealth or 1000
+    })
 end)
 
-RegisterServerEvent('vrs_garage:setVehicleOut', function(plate, stored)
+RegisterServerEvent('vrs_garage:setVehicleOut', function(plate)
     local plate = string.gsub(plate, ' ', '')
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
+    local player = QBCore.Functions.GetPlayer(source)
+    local citizenId = player.PlayerData.citizenid
     CustomSQL('update',
-        'UPDATE owned_vehicles SET stored = ?, parking = NULL, impound = NULL WHERE REPLACE(plate, " ", "") = ? and owner = ?',
-        {stored, plate, identifier})
+        'UPDATE player_vehicles SET garage = NULL, impound = NULL WHERE REPLACE(plate, " ", "") = ? and citizenid = ?',
+        {plate, citizenId})
 end)
 
-RegisterServerEvent('vrs_garage:setVehicleParking', function(plate, parking)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
-    CustomSQL('update', 'UPDATE owned_vehicles SET parking = ? WHERE plate = ? and owner = ?',
-        {parking, plate, identifier})
+RegisterServerEvent('vrs_garage:setVehicleParking', function(plate, garage)
+    local player = QBCore.Functions.GetPlayer(source)
+    local citizenId = player.PlayerData.citizenid
+    CustomSQL('update', 'UPDATE player_vehicles SET garage = ? WHERE plate = ? and citizenid = ?',
+        {garage, plate, citizenId})
 end)
 
 RegisterServerEvent('vrs_garage:setVehicleImpound', function(plate, impound)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    local identifier = xPlayer.getIdentifier()
-    CustomSQL('update', 'UPDATE owned_vehicles SET impound = ? WHERE plate = ? and owner = ?',
-        {impound, plate, identifier})
+    local player = QBCore.Functions.GetPlayer(source)
+    local citizenId = player.PlayerData.citizenid
+    CustomSQL('update', 'UPDATE player_vehicles SET impound = ? WHERE plate = ? and citizenid = ?',
+        {impound, plate, citizenId})
 end)
 
 lib.callback.register('vrs_garage:setPlayerRoutingBucket', function(source, bucket)
@@ -126,7 +176,7 @@ function CustomSQL(type, action, placeholder)
     return result
 end
 
-
+--[[
 if Config.ImpoundCommandEnabled then
     ESX.RegisterCommand(Config.ImpoundCommand.command, 'user', function(xPlayer, args, showError)
         for k, job in pairs(Config.ImpoundCommand.jobs) do
@@ -138,3 +188,4 @@ if Config.ImpoundCommandEnabled then
         help = locale('command_impound')
     })    
 end
+]]

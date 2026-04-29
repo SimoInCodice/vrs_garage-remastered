@@ -1,4 +1,5 @@
-ESX = exports['es_extended']:getSharedObject()
+--ESX = exports['es_extended']:getSharedObject()
+local QBCore = exports['qb-core']:GetCoreObject()
 lib.locale()
 local isBusy = false
 local cam = nil
@@ -9,19 +10,20 @@ local jobBlips = {}
 
 RegisterNetEvent('esx:playerLoaded')
 AddEventHandler('esx:playerLoaded', function(xPlayer, isNew, skin)
-    ESX.PlayerData = xPlayer
+    QBCore.Functions.GetPlayerData().job = xPlayer
 end)
 
 RegisterNetEvent('esx:setJob')
 AddEventHandler('esx:setJob', function(job)
-    ESX.PlayerData.job = job
+    QBCore.Functions.GetPlayerData().job = job
     ManageJobsBlips()
 end)
 
 function onEnter(self)
+    QBCore.Debug(self)
     zoneIndex = self.index
     if self.job then
-        if ESX.PlayerData.job.name == self.job then
+        if QBCore.Functions.GetPlayerData().job.name == self.job then
             if Config.UseRadialMenu then
                 lib.addRadialItem({{
                     id = 'access-'.. self.name,
@@ -70,7 +72,7 @@ function inside(self)
     if IsControlJustReleased(0, 38) and not Config.UseRadialMenu and not isBusy then
         isBusy = true
         if self.job then
-            if ESX.PlayerData.job.name == self.job then
+            if QBCore.Functions.GetPlayerData().job.name == self.job then
                 TriggerEvent('vrs_garage:access-' .. self.name, self)
             end
         else
@@ -83,7 +85,7 @@ end
 
 function spawnVehicle(vehicleData, plate, coords)
     if not lib.getClosestVehicle(vector3(coords), 5.0, false) then
-        ESX.Game.SpawnVehicle(vehicleData.model, vector3(coords), coords.w, function(veh)
+        QBCore.Functions.SpawnVehicle(vehicleData.model, vector3(coords), coords.w, function(veh)
             SetPedIntoVehicle(PlayerPedId(), veh, -1)
             lib.setVehicleProperties(veh, vehicleData)
             lib.notify({
@@ -181,7 +183,7 @@ RegisterNetEvent('vrs_garage:sendVehicleImpound', function(targetPlate)
         description = locale('vehicle_sent_to_impounded'),
         type = 'info'
     })
-    local vehicles = ESX.Game.GetVehicles()
+    local vehicles = QBCore.Functions.GetVehicles()
     for i = 1, #vehicles do
         local vehicle = vehicles[i]
         if DoesEntityExist(vehicle) then
@@ -195,7 +197,7 @@ RegisterNetEvent('vrs_garage:sendVehicleImpound', function(targetPlate)
 end)
 
 RegisterNetEvent('vrs_garage:findVehicle', function(targetPlate)
-    local vehicles = ESX.Game.GetVehicles()
+    local vehicles = QBCore.Functions.GetVehicles()
     local found = false
     for i = 1, #vehicles do
         local vehicle = vehicles[i]
@@ -277,7 +279,7 @@ function EnterPreviewMode(vehicleData, spawn)
     end
     lib.callback('vrs_garage:setPlayerRoutingBucket', false, function(canContinue)
         if canContinue then
-            ESX.Game.SpawnVehicle(vehicleData.model, vector3(spawn), spawn.w, function(veh)
+            QBCore.Functions.SpawnVehicle(vehicleData.model, vector3(spawn), spawn.w, function(veh)
                 previewVehicle = veh
                 lib.setVehicleProperties(veh, vehicleData)
                 FreezeEntityPosition(veh, true)
@@ -532,7 +534,7 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
                                         type = 'success'
                                     })
                                     -- NetworkFadeOutEntity(currentVehicle, true, true)
-                                    ESX.Game.DeleteVehicle(currentVehicle)
+                                    QBCore.Functions.DeleteVehicle(currentVehicle)
                                 else
                                     lib.notify({
                                         description = locale('vehicle_not_allowed'),
@@ -547,7 +549,7 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
                                         description = locale('vehicle_stored'),
                                         type = 'success'
                                     })
-                                    ESX.Game.DeleteVehicle(currentVehicle)
+                                    QBCore.Functions.DeleteVehicle(currentVehicle)
                                 else
                                     lib.notify({
                                         description = locale('vehicle_not_allowed'),
@@ -681,7 +683,7 @@ function ManageJobsBlips()
         table.remove(jobBlips, k)
     end
     for job, v in pairs(Config.JobGarajes) do
-        if job == ESX.PlayerData.job.name then
+        if job == QBCore.Functions.GetPlayerData().job.name then
             for k, v in pairs(v.locations) do 
                 if v.blip then
                     local blip = AddBlipForCoord(v.access.x, v.access.y)
@@ -882,11 +884,11 @@ for job, vehicles in pairs(Config.JobVehicles) do
 end
 
 Citizen.CreateThread(function()
-    while not ESX.IsPlayerLoaded() do
-        Wait(100)
-    end
     CreateGarages()
     CreateImpounds()
     CreateJobGarages()
-    ManageJobsBlips()
+    Wait(1000)
+    if QBCore.Functions.GetPlayerData().job then
+        ManageJobsBlips()
+    end
 end)
