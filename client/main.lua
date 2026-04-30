@@ -540,43 +540,51 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
     local ped = PlayerPedId()
     if IsPedInAnyVehicle(ped, false) then
         local currentVehicle = GetVehiclePedIsIn(ped, false)
+        
         if GetPedInVehicleSeat(currentVehicle, -1) == ped then
             local plate = GetVehicleNumberPlateText(currentVehicle)
+            
             lib.callback('vrs_garage:checkOwner', false, function(isOwner)
                 if isOwner then
                     lib.callback('vrs_garage:getVehicle', false, function(vehicle)
                         if vehicle then
+                            local canStore = false
                             if zone.job then
                                 if zone.job == vehicle.job and zone.type == vehicle.type then
-                                    local vehicleProperties = json.encode(lib.getVehicleProperties(currentVehicle))
-                                    TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, 1)
-                                    lib.notify({
-                                        description = locale('vehicle_stored'),
-                                        type = 'success'
-                                    })
-                                    -- NetworkFadeOutEntity(currentVehicle, true, true)
-                                    QBCore.Functions.DeleteVehicle(currentVehicle)
-                                else
-                                    lib.notify({
-                                        description = locale('vehicle_not_allowed'),
-                                        type = 'error'
-                                    })
+                                    canStore = true
                                 end
                             else
                                 if not vehicle.job and zone.type == vehicle.type then
-                                    local vehicleProperties = json.encode(lib.getVehicleProperties(currentVehicle))
-                                    TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, 1)
-                                    lib.notify({
-                                        description = locale('vehicle_stored'),
-                                        type = 'success'
-                                    })
-                                    QBCore.Functions.DeleteVehicle(currentVehicle)
-                                else
-                                    lib.notify({
-                                        description = locale('vehicle_not_allowed'),
-                                        type = 'error'
-                                    })
+                                    canStore = true
                                 end
+                            end
+
+                            if canStore then
+                                local vehicleProperties = lib.getVehicleProperties(currentVehicle)
+                                
+                                local fuel = 100.0
+                                if Config.FuelSystem == 'ox_fuel' then
+                                    fuel = Entity(currentVehicle).state.fuel or 100.0
+                                else
+                                    fuel = GetVehicleFuelLevel(currentVehicle)
+                                end
+
+                                local engine = GetVehicleEngineHealth(currentVehicle)
+                                local body = GetVehicleBodyHealth(currentVehicle)
+
+                                TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, true)
+                                
+                                lib.notify({
+                                    description = locale('vehicle_stored'),
+                                    type = 'success'
+                                })
+                                
+                                QBCore.Functions.DeleteVehicle(currentVehicle)
+                            else
+                                lib.notify({
+                                    description = locale('vehicle_not_allowed'),
+                                    type = 'error'
+                                })
                             end
                         end
                     end, plate)
