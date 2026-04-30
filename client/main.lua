@@ -84,29 +84,38 @@ function inside(self)
 end
 
 function spawnVehicle(vehicleData, plate, coords)
-    if not lib.getClosestVehicle(vector3(coords), 5.0, false) then
-        QBCore.Functions.SpawnVehicle(vehicleData.model, vector3(coords), coords.w, function(veh)
+    local spawnCoords = vector3(coords.x, coords.y, coords.z)
+    local heading = coords.w or coords.h or 0.0
+
+    if not lib.getClosestVehicle(spawnCoords, 5.0, false) then
+        QBCore.Functions.SpawnVehicle(vehicleData.model, function(veh)
+            SetVehicleNumberPlateText(veh, plate)
+            
             SetPedIntoVehicle(PlayerPedId(), veh, -1)
             lib.setVehicleProperties(veh, vehicleData)
+            
             lib.notify({
                 description = locale('vehicle_out'),
                 type = 'success'
             })
+            
             TriggerServerEvent('vrs_garage:setVehicleOut', plate, false)
+
+            -- Gestione Fuel
+            local fuel = vehicleData.fuelLevel or 100.0
             if Config.FuelSystem == 'LegacyFuel' then
-                if vehicleData.fuelLevel then
-                    exports["LegacyFuel"]:SetFuel(veh, vehicleData.fuelLevel)
-                end
+                exports["LegacyFuel"]:SetFuel(veh, fuel)
             elseif Config.FuelSystem == 'ox_fuel' then
-                Entity(veh).state.fuel = vehicleData.fuelLevel
-            elseif Config.FuelSystem == 'custom' then
-                -- add your custom system export here
+                Entity(veh).state.fuel = fuel
             end
-            if Config.KeySystem == 'custom' then
+
+            if Config.KeySystem == 'qbkeysystem' then
+                TriggerEvent('qb-vehiclekeys:client:AddKeys', plate)
+            elseif Config.KeySystem == 'custom' then
                 Entity(veh).state.owner = GetPlayerServerId(PlayerId())
-                -- add your custom system export here
             end
-        end)
+            
+        end, spawnCoords, true)
     else
         lib.notify({
             description = locale('vehicles_in_zone'),
@@ -160,8 +169,8 @@ RegisterNetEvent('vrs_garage:takeOutVehicle', function(args)
     ExitPreviewMode()
     lib.callback('vrs_garage:getVehicle', false, function(vehicle)
         if vehicle then
-            if vehicle.stored then
-                local vehicleData = json.decode(vehicle.vehicle)
+            if vehicle.state then
+                local vehicleData = vehicle.data
                 spawnVehicle(vehicleData, vehicle.plate, args.spawn)
             else
                 lib.notify({
@@ -277,18 +286,30 @@ function EnterPreviewMode(vehicleData, spawn)
         DeleteVehicle(previewVehicle)
         previewVehicle = nil
     end
+
     lib.callback('vrs_garage:setPlayerRoutingBucket', false, function(canContinue)
         if canContinue then
-            QBCore.Functions.SpawnVehicle(vehicleData.model, vector3(spawn), spawn.w, function(veh)
+            local coords = vector3(spawn.x, spawn.y, spawn.z)
+            local heading = spawn.w or spawn.h or 0.0
+
+            QBCore.Functions.SpawnVehicle(vehicleData.model, function(veh)
                 previewVehicle = veh
-                lib.setVehicleProperties(veh, vehicleData)
+                -- Usa le proprietà salvate nel campo 'data' (che abbiamo sistemato prima)
+                lib.setVehicleProperties(veh, vehicleData) 
+                
                 FreezeEntityPosition(veh, true)
+                SetEntityInvincible(veh, true) -- Consigliato per il preview
+                
+                -- Configurazione Camera
+                local camCoords = GetOffsetFromEntityInWorldCoords(previewVehicle, -3.0, 3.0, 0.5)
                 cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA',
-                    GetOffsetFromEntityInWorldCoords(previewVehicle, -3.0, 3.0, 0.5), 0.0, 0.0, GetEntityHeading(veh) - 130.0,
-                    60.0)
+                    camCoords.x, camCoords.y, camCoords.z, 
+                    0.0, 0.0, GetEntityHeading(veh) - 130.0,
+                    60.0, false, 0)
+                
                 SetCamActive(cam, true)
                 RenderScriptCams(true, true, 1000, true, false)
-            end)
+            end, coords, true) -- Passiamo coords qui (dipende dalla versione di QBX/QB)
         end
     end)
 end
@@ -344,14 +365,14 @@ RegisterNetEvent('vrs_garage:access-garage', function(zone)
         if #vehicles > 0 then
             for k, v in pairs(vehicles) do
                 if v then
-                    local vehicleData = json.decode(v.vehicle)
+                    local vehicleData = v.data
                     local vehicleTitle = GetVehicleName(vehicleData.model)
                     local iconColor = 'rgb(29 78 216)'
                     local icon = 'car'
                     local description = locale('plate', v.plate)
                     local metadata = GetVehicleMetaData(vehicleData)
 
-                    if v.stored == 0 or v.stored == false then
+                    if v.state == 0 or v.state == false then
                         iconColor = 'rgb(250 204 21)' --Yellow
                     end
 
@@ -360,9 +381,9 @@ RegisterNetEvent('vrs_garage:access-garage', function(zone)
                         vehicleTitle = vehicleTitle .. ' ' .. locale('impounded')
                     end
 
-                    if v.parking ~= nil and v.parking ~= zone.index and (v.stored == 1 or v.stored == true) then
+                    if v.garage ~= nil and v.garage ~= zone.index and (v.state == 1 or v.state == true) then
                         iconColor = 'rgb(96 165 250)'
-                        description = description .. ', ' .. locale('parked_in') .. ' ' .. locale(v.parking)
+                        description = description .. ', ' .. locale('parked_in') .. ' ' .. locale(v.garage)
                     end
 
                     if zone.job then
@@ -376,8 +397,8 @@ RegisterNetEvent('vrs_garage:access-garage', function(zone)
                             arrow = true,
                             onSelect = function()
                                 local options = {}
-                                if v.stored == 1 or v.stored == true then
-                                    if v.parking ~= nil and v.parking ~= zone.index then
+                                if v.state == 1 or v.state == true then
+                                    if v.garage ~= nil and v.garage ~= zone.index then
                                         table.insert(options, {
                                             title = locale('transfer_vehicle'),
                                             description = '',
@@ -441,8 +462,8 @@ RegisterNetEvent('vrs_garage:access-garage', function(zone)
                                 arrow = true,
                                 onSelect = function()
                                     local options = {}
-                                    if v.stored == 1 or v.stored == true then
-                                        if v.parking ~= nil and v.parking ~= zone.index then
+                                    if v.state == 1 or v.state == true then
+                                        if v.garage ~= nil and v.garage ~= zone.index then
                                             table.insert(options, {
                                                 title = locale('transfer_vehicle', Config.TransferVehiclePrice[zone.type]),
                                                 icon = 'right-from-bracket',
@@ -528,7 +549,7 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
                             if zone.job then
                                 if zone.job == vehicle.job and zone.type == vehicle.type then
                                     local vehicleProperties = json.encode(lib.getVehicleProperties(currentVehicle))
-                                    TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, true)
+                                    TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, 1)
                                     lib.notify({
                                         description = locale('vehicle_stored'),
                                         type = 'success'
@@ -544,7 +565,7 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
                             else
                                 if not vehicle.job and zone.type == vehicle.type then
                                     local vehicleProperties = json.encode(lib.getVehicleProperties(currentVehicle))
-                                    TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, true)
+                                    TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, 1)
                                     lib.notify({
                                         description = locale('vehicle_stored'),
                                         type = 'success'

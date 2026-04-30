@@ -10,9 +10,9 @@ Config.StoreDistance = 10.0
 
 Config.MySQL = 'oxmysql' -- 'mysql-async', 'oxmysql', 'ghmattisql'
 
-Config.FuelSystem = 'custom' -- 'LegacyFuel', 'ox_fuel', 'custom' (client/main.lua:98 to set a custom export)
+Config.FuelSystem = 'ox_fuel' -- 'LegacyFuel', 'ox_fuel', 'custom' (client/main.lua:98 to set a custom export)
 
-Config.KeySystem = 'custom'
+Config.KeySystem = 'qbkeysystem' -- 'qbkeysystem', 'custom'
 
 Config.PedEnabled = true
 

@@ -12,25 +12,57 @@ lib.callback.register('vrs_garage:checkOwner', function(source, plate)
 end)
 
 lib.callback.register('vrs_garage:getVehicles', function(source, job, type)
-    print('Callback getVehicles called with job:', job, 'and type:', type)
-    QBCore.Debug(source, job, type)
     local player = QBCore.Functions.GetPlayer(source)
-    QBCore.Debug(player)
+    if not player then return {} end
+    
     local citizenId = player.PlayerData.citizenid
     local result
+
     if job then
-        result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE citizenid = ? and job = ? and type = ? ORDER BY stored DESC',
-            {citizenId, job, type})
+        result = CustomSQL('query', "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND job = ? AND type = ? ORDER BY state DESC", {citizenId, job, type})
     else
-        result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE citizenid = ? and type = ? ORDER BY stored DESC', {citizenId, type})
+        result = CustomSQL("query", "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND type = ? ORDER BY state DESC", {citizenId, type})
     end
+
+    if not result or #result == 0 then 
+        return {} 
+    end
+
+    for i = 1, #result do
+        if result[i] and result[i].data then
+            -- Decodifica la stringa JSON inviata da SQL in tabella Lua
+            result[i].data = json.decode(result[i].data)
+        else
+            result[i].data = {}
+        end
+    end
+
     return result
 end)
 
 lib.callback.register('vrs_garage:getImpoundedVehicles', function(source, type)
     local player = QBCore.Functions.GetPlayer(source)
+    if not player then return {} end -- Sicurezza: se il player non è caricato
+    
     local citizenId = player.PlayerData.citizenid
-    local result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE citizenid = ? and impound = 1 and type = ?', {citizenId, type})
+    
+    local result = CustomSQL('query', "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND impound = 1 AND type = ?", {citizenId, type})
+
+    -- Se result è nil o la tabella è vuota, ritorna subito una tabella vuota
+    if not result or #result == 0 then 
+        return {} 
+    end
+
+    for i = 1, #result do
+        -- Verifichiamo che la riga i esista e che contenga il campo data
+        if result[i] and result[i].data then
+            result[i].data = json.decode(result[i].data)
+        else
+            -- Se data è mancante per qualche riga, inizializziamo a tabella vuota
+            if result[i] then result[i].data = {} end
+        end
+    end
+
     return result
 end)
 
@@ -47,34 +79,47 @@ lib.callback.register('vrs_garage:canPay', function(source, amount)
 end)
 
 lib.callback.register('vrs_garage:getVehicle', function(source, plate)
-    local plate = string.gsub(plate, ' ', '')
+    local cleanPlate = string.gsub(plate, ' ', '')
     local player = QBCore.Functions.GetPlayer(source)
+    if not player then return nil end
+    
     local citizenId = player.PlayerData.citizenid
-    local result = CustomSQL('query', 'SELECT * FROM player_vehicles WHERE REPLACE(plate, " ", "") = ? and citizenid = ?', {plate, citizenId})
-    return result[1]
+
+    local result = CustomSQL('query', "SELECT plate, state, garage, impound, job, type, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE REPLACE(plate, ' ', '') = ? AND citizenid = ?", {cleanPlate, citizenId})
+
+    if result and result[1] then
+        local vehicleData = result[1]
+        
+        if vehicleData.data then
+            vehicleData.data = json.decode(vehicleData.data)
+        else
+            vehicleData.data = {}
+        end
+        
+        return vehicleData
+    end
+
+    return nil
 end)
 
-RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, garage)
+RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, garage, stored)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
     local citizenid = Player.PlayerData.citizenid
 
-    -- pulizia targa
     local cleanPlate = string.gsub(plate, '%s+', '')
 
-    -- dati veicolo
     local fuel = math.ceil(vehicle.fuelLevel or 0)
     local engine = vehicle.engineHealth or 1000.0
     local body = vehicle.bodyHealth or 1000.0
 
-    -- 🔥 mods complete
     local mods = json.encode(vehicle)
 
     CustomSql('update', [[
         UPDATE player_vehicles 
-        SET garage = ?, fuel = ?, engine = ?, body = ?, mods = ?
+        SET garage = ?, fuel = ?, engine = ?, body = ?, mods = ?, state = ?
         WHERE REPLACE(plate, ' ', '') = ? AND citizenid = ?
     ]], {
         garage,
@@ -82,6 +127,7 @@ RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, garage)
         engine,
         body,
         mods,
+        stored,
         cleanPlate,
         citizenid
     })
@@ -120,21 +166,22 @@ RegisterServerEvent('vrs_garage:setVehicleOut', function(plate)
     local player = QBCore.Functions.GetPlayer(source)
     local citizenId = player.PlayerData.citizenid
     CustomSQL('update',
-        'UPDATE player_vehicles SET garage = NULL, impound = NULL WHERE REPLACE(plate, " ", "") = ? and citizenid = ?',
+        'UPDATE player_vehicles SET garage = NULL, impound = NULL, state = NULL WHERE REPLACE(plate, " ", "") = ? and citizenid = ?',
         {plate, citizenId})
 end)
 
 RegisterServerEvent('vrs_garage:setVehicleParking', function(plate, garage)
     local player = QBCore.Functions.GetPlayer(source)
     local citizenId = player.PlayerData.citizenid
-    CustomSQL('update', 'UPDATE player_vehicles SET garage = ? WHERE plate = ? and citizenid = ?',
+    print(citizenId, plate, garage)
+    CustomSQL('update', 'UPDATE player_vehicles SET garage = ?, state = 1 WHERE plate = ? and citizenid = ?',
         {garage, plate, citizenId})
 end)
 
 RegisterServerEvent('vrs_garage:setVehicleImpound', function(plate, impound)
     local player = QBCore.Functions.GetPlayer(source)
     local citizenId = player.PlayerData.citizenid
-    CustomSQL('update', 'UPDATE player_vehicles SET impound = ? WHERE plate = ? and citizenid = ?',
+    CustomSQL('update', 'UPDATE player_vehicles SET impound = ?, state = 1 WHERE plate = ? and citizenid = ?',
         {impound, plate, citizenId})
 end)
 
