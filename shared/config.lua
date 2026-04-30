@@ -86,6 +86,9 @@ Config.VehiclesNames = {
 }
 
 Config.JobVehicles = {
+    ['omozan'] = {
+        ['boxville4'] = {price = 2000}
+    },
     ['police'] = {
         ['police'] = {price = 1000},
         ['police2'] = {price = 1000},
@@ -106,6 +109,26 @@ Config.JobVehicles = {
 }
 
 Config.JobGarajes = {
+    ['omozan'] = {
+        ped = {
+            model = 'csb_trafficwarden',
+            task = 'WORLD_HUMAN_STAND_MOBILE_UPRIGHT'
+        },
+        locations = {
+            ['omozan_deposit'] = {
+                blip = {
+                    label = locale('omozan_deposit'),
+                    sprite = 357,
+                    scale = 0.8,
+                    colour = 29
+                },
+                access = vec4(440.3128, -1013.3806, 28.6250, 152.6308),
+                store = vec4(423.4687, -1021.6505, 28.9481, 88.9128),
+                spawn = vec4(450.7397, -1019.5090, 28.4583, 92.3000),
+                type = 'car'
+            }
+        }
+    },
     ['police'] = {
         ped = {
             model = 'csb_trafficwarden',

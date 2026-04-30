@@ -309,7 +309,7 @@ function EnterPreviewMode(vehicleData, spawn)
                 
                 SetCamActive(cam, true)
                 RenderScriptCams(true, true, 1000, true, false)
-            end, coords, true) -- Passiamo coords qui (dipende dalla versione di QBX/QB)
+            end, coords, true)
         end
     end)
 end
@@ -561,16 +561,6 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
 
                             if canStore then
                                 local vehicleProperties = lib.getVehicleProperties(currentVehicle)
-                                
-                                local fuel = 100.0
-                                if Config.FuelSystem == 'ox_fuel' then
-                                    fuel = Entity(currentVehicle).state.fuel or 100.0
-                                else
-                                    fuel = GetVehicleFuelLevel(currentVehicle)
-                                end
-
-                                local engine = GetVehicleEngineHealth(currentVehicle)
-                                local body = GetVehicleBodyHealth(currentVehicle)
 
                                 TriggerServerEvent('vrs_garage:updateVehicle', plate, vehicleProperties, zone.index, true)
                                 

@@ -109,6 +109,8 @@ RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, garage,
 
     local citizenid = Player.PlayerData.citizenid
 
+    print('Updating vehicle for citizenid:', citizenid, 'plate:', plate, 'garage:', garage, 'stored:', stored)
+
     local cleanPlate = string.gsub(plate, '%s+', '')
 
     local fuel = math.ceil(vehicle.fuelLevel or 0)
@@ -117,7 +119,7 @@ RegisterServerEvent('vrs_garage:updateVehicle', function(plate, vehicle, garage,
 
     local mods = json.encode(vehicle)
 
-    CustomSql('update', [[
+    CustomSQL('update', [[
         UPDATE player_vehicles 
         SET garage = ?, fuel = ?, engine = ?, body = ?, mods = ?, state = ?
         WHERE REPLACE(plate, ' ', '') = ? AND citizenid = ?
@@ -144,7 +146,7 @@ RegisterServerEvent('vrs_garage:buyVehicle', function(plate, vehicle, garage, jo
 
     local props = json.encode(vehicle)
 
-    CustomSql('insert', [[
+    CustomSQL('insert', [[
         INSERT INTO player_vehicles 
         (citizenid, vehicle, plate, mods, garage, state, fuel, engine, body)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
