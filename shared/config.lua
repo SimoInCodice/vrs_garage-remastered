@@ -82,7 +82,7 @@ Config.ImpoundBlip = {
 }
 
 Config.VehiclesNames = {
-    -- ['model'] = 'Vehicle Name',
+    ['boxville4'] = 'Omozan Van',
 }
 
 Config.JobVehicles = {
@@ -118,13 +118,13 @@ Config.JobGarajes = {
             ['omozan_deposit'] = {
                 blip = {
                     label = locale('omozan_deposit'),
-                    sprite = 357,
+                    sprite = 616,
                     scale = 0.8,
-                    colour = 29
+                    colour = 47
                 },
-                access = vec4(440.3128, -1013.3806, 28.6250, 152.6308),
-                store = vec4(423.4687, -1021.6505, 28.9481, 88.9128),
-                spawn = vec4(450.7397, -1019.5090, 28.4583, 92.3000),
+                access = vec4(-401.9840, -2810.5488, 6.0004, 249.5351),
+                store = vec4(-408.6989, -2836.5591, 6.0004, 315.1499),
+                spawn = vec4(-408.6989, -2836.5591, 6.0004, 315.1499),
                 type = 'car'
             }
         }
