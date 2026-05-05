@@ -25,3 +25,8 @@ server_scripts {
 files {
 	'locales/*.json'
 }
+
+dependencies {
+	'ox_lib',
+	'ox_inventory'
+}
