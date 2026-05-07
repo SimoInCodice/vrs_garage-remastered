@@ -11,7 +11,7 @@ lib.callback.register('vrs_garage:checkOwner', function(source, plate)
     end
 end)
 
-lib.callback.register('vrs_garage:getVehicles', function(source, job, type)
+lib.callback.register('vrs_garage:getVehicles', function(source, job)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return {} end
     
@@ -19,9 +19,9 @@ lib.callback.register('vrs_garage:getVehicles', function(source, job, type)
     local result
 
     if job then
-        result = CustomSQL('query', "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND job = ? AND type = ? ORDER BY state DESC", {citizenId, job, type})
+        result = CustomSQL('query', "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND job = ? ORDER BY state DESC", {citizenId, job})
     else
-        result = CustomSQL("query", "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND type = ? ORDER BY state DESC", {citizenId, type})
+        result = CustomSQL("query", "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? ORDER BY state DESC", {citizenId})
     end
 
     if not result or #result == 0 then 
@@ -40,13 +40,13 @@ lib.callback.register('vrs_garage:getVehicles', function(source, job, type)
     return result
 end)
 
-lib.callback.register('vrs_garage:getImpoundedVehicles', function(source, type)
+lib.callback.register('vrs_garage:getImpoundedVehicles', function(source)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return {} end -- Sicurezza: se il player non è caricato
     
     local citizenId = player.PlayerData.citizenid
     
-    local result = CustomSQL('query', "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND impound = 1 AND type = ?", {citizenId, type})
+    local result = CustomSQL('query', "SELECT plate, state, garage, impound, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE citizenid = ? AND impound = 1", {citizenId})
 
     -- Se result è nil o la tabella è vuota, ritorna subito una tabella vuota
     if not result or #result == 0 then 
@@ -68,14 +68,31 @@ end)
 
 lib.callback.register('vrs_garage:canPay', function(source, amount)
     local player = QBCore.Functions.GetPlayer(source)
-    local citizenId = player.PlayerData.citizenid
-    local playerMoney = bank:getAccountMoney(citizenId) -- Get the Current Player`s Balance.
-    if playerMoney >= amount then -- check if the Player`s Money is more or equal to the cost.
-        bank:removeAccountMoney(citizenId, amount) -- remove Cost from balance
-        return true
+    if not player then return false end
+
+    -- DEBUG: Vediamo quanto costa e chi paga
+    print(string.format("^3[DEBUG]^7 Tentativo di pagamento: Source [%s], Importo [%s]", source, amount))
+
+    local itemCount = exports.ox_inventory:Search(source, 'count', 'money')
+    
+    -- DEBUG: Vediamo quanti soldi trova ox_inventory
+    print(string.format("^3[DEBUG]^7 Soldi trovati in inventario: %s", itemCount))
+
+    if itemCount >= amount then
+        -- 2. Tentativo di rimozione
+        local removed = exports.ox_inventory:RemoveItem(source, 'cash', amount)
+        
+        if removed then
+            print("^2[DEBUG]^7 Pagamento completato con successo.")
+            return true
+        else
+            print("^1[DEBUG]^7 Errore durante RemoveItem (forse l'item è bloccato o insufficiente?)")
+        end
     else
-        return false
+        print("^1[DEBUG]^7 Soldi insufficienti.")
     end
+
+    return false
 end)
 
 lib.callback.register('vrs_garage:getVehicle', function(source, plate)
@@ -85,7 +102,7 @@ lib.callback.register('vrs_garage:getVehicle', function(source, plate)
     
     local citizenId = player.PlayerData.citizenid
 
-    local result = CustomSQL('query', "SELECT plate, state, garage, impound, job, type, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE REPLACE(plate, ' ', '') = ? AND citizenid = ?", {cleanPlate, citizenId})
+    local result = CustomSQL('query', "SELECT plate, state, garage, impound, job, JSON_MERGE_PATCH(JSON_OBJECT('model', vehicle, 'fuelLevel', fuel, 'engineHealth', engine, 'bodyHealth', body), mods) as data FROM player_vehicles WHERE REPLACE(plate, ' ', '') = ? AND citizenid = ?", {cleanPlate, citizenId})
 
     if result and result[1] then
         local vehicleData = result[1]
@@ -140,7 +157,10 @@ RegisterServerEvent('vrs_garage:buyVehicle', function(plate, vehicle, garage, jo
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
+
     local citizenid = Player.PlayerData.citizenid
+
+    local vehicleType = job and Config.JobGarajes[job] and Config.JobGarajes[job].locations[garage] and Config.JobGarajes[job].locations[garage].type or Config.Garages[garage] and Config.Garages[garage].type or 'car'
 
     local cleanPlate = string.gsub(plate, '%s+', '')
 
@@ -148,8 +168,8 @@ RegisterServerEvent('vrs_garage:buyVehicle', function(plate, vehicle, garage, jo
 
     CustomSQL('insert', [[
         INSERT INTO player_vehicles 
-        (citizenid, vehicle, plate, mods, garage, state, fuel, engine, body)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (citizenid, vehicle, plate, mods, garage, state, fuel, engine, body, job)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ]], {
         citizenid,
         vehicle.model,
@@ -159,7 +179,8 @@ RegisterServerEvent('vrs_garage:buyVehicle', function(plate, vehicle, garage, jo
         1, -- in garage
         vehicle.fuelLevel or 100,
         vehicle.engineHealth or 1000,
-        vehicle.bodyHealth or 1000
+        vehicle.bodyHealth or 1000,
+        job
     })
 end)
 

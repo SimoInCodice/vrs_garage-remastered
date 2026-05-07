@@ -124,6 +124,20 @@ function spawnVehicle(vehicleData, plate, coords)
     end
 end
 
+local function getVehicleTypeFromModel(modelHash)
+    local class = GetVehicleClassFromName(modelHash)
+    
+    if class == 8 then
+        return 'bike'
+    elseif class == 14 then
+        return 'boat'
+    elseif class == 15 or class == 16 then
+        return 'plane'
+    else
+        return 'car'
+    end
+end
+
 RegisterNetEvent('vrs_garage:impoundVehicle', function()
     local ped = PlayerPedId()
     local closestVehicle = lib.getClosestVehicle(GetEntityCoords(ped), Config.ImpoundCommand.radius, false)
@@ -543,6 +557,7 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
         
         if GetPedInVehicleSeat(currentVehicle, -1) == ped then
             local plate = GetVehicleNumberPlateText(currentVehicle)
+            local type = getVehicleTypeFromModel(GetEntityModel(currentVehicle))
             
             lib.callback('vrs_garage:checkOwner', false, function(isOwner)
                 if isOwner then
@@ -550,11 +565,11 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
                         if vehicle then
                             local canStore = false
                             if zone.job then
-                                if zone.job == vehicle.job and zone.type == vehicle.type then
+                                if zone.job == vehicle.job and zone.type == type then
                                     canStore = true
                                 end
                             else
-                                if not vehicle.job and zone.type == vehicle.type then
+                                if not vehicle.job and zone.type == type then
                                     canStore = true
                                 end
                             end
@@ -572,7 +587,7 @@ RegisterNetEvent('vrs_garage:access-store', function(zone)
                                 QBCore.Functions.DeleteVehicle(currentVehicle)
                             else
                                 lib.notify({
-                                    description = locale('vehicle_not_allowed'),
+                                    description = locale('vehicle_not_allowed').." "..type,
                                     type = 'error'
                                 })
                             end
