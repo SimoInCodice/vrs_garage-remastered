@@ -8,15 +8,15 @@ local previewVehicle = nil
 local inPreviewMode = false
 local jobBlips = {}
 
-RegisterNetEvent('esx:playerLoaded')
-AddEventHandler('esx:playerLoaded', function(xPlayer, isNew, skin)
-    QBCore.Functions.GetPlayerData().job = xPlayer
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+    ManageJobsBlips()
 end)
 
-RegisterNetEvent('esx:setJob')
-AddEventHandler('esx:setJob', function(job)
-    QBCore.Functions.GetPlayerData().job = job
-    ManageJobsBlips()
+RegisterNetEvent('QBCore:Client:OnJobUpdate', function(JobInfo)
+    print('Job changed to:', JobInfo.label, 'Grade:', JobInfo.level)
+    if QBCore.Functions.GetPlayerData().job then
+        ManageJobsBlips()
+    end
 end)
 
 function onEnter(self)
@@ -220,8 +220,9 @@ RegisterNetEvent('vrs_garage:sendVehicleImpound', function(targetPlate)
 end)
 
 RegisterNetEvent('vrs_garage:findVehicle', function(targetPlate)
-    local vehicles = QBCore.Functions.GetVehicles()
+    local vehicles = GetGamePool('CVehicle')
     local found = false
+    print('Searching for vehicle with plate:', targetPlate)
     for i = 1, #vehicles do
         local vehicle = vehicles[i]
         if DoesEntityExist(vehicle) then
@@ -614,7 +615,7 @@ RegisterNetEvent('vrs_garage:access-impound', function(zone)
         local options = {}
         if vehicles and #vehicles > 0 then
             for k, v in pairs(vehicles) do
-                local vehicleData = json.decode(v.vehicle)
+                local vehicleData = v.data
                 local vehicleTitle = GetVehicleName(vehicleData.model)
                 local iconColor = 'rgb(190 18 60)'
                 local icon = 'car'
@@ -671,7 +672,7 @@ RegisterNetEvent('vrs_garage:recoverVehicle', function(args)
             if vehicle.impound then
                 lib.callback('vrs_garage:canPay', false, function(canPay)
                     if canPay then
-                        local vehicleData = json.decode(vehicle.vehicle)
+                        local vehicleData = vehicle.data
                         spawnVehicle(vehicleData, vehicle.plate, Config.Impounds[args.zone.index].spawn)
                         TriggerServerEvent('vrs_garage:setVehicleOut', vehicle.plate, false)
                     else
@@ -922,7 +923,4 @@ Citizen.CreateThread(function()
     CreateImpounds()
     CreateJobGarages()
     Wait(1000)
-    if QBCore.Functions.GetPlayerData().job then
-        ManageJobsBlips()
-    end
 end)

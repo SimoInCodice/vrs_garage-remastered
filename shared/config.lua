@@ -83,9 +83,13 @@ Config.ImpoundBlip = {
 
 Config.VehiclesNames = {
     ['boxville4'] = 'Omozan Van',
+    ['coach'] = 'Bus'
 }
 
 Config.JobVehicles = {
+    ['bus'] = {
+        ['coach'] = {price = 2000}
+    },
     ['omozan'] = {
         ['boxville4'] = {price = 2000}
     },
@@ -125,6 +129,26 @@ Config.JobGarajes = {
                 access = vec4(-401.9840, -2810.5488, 6.0004, 249.5351),
                 store = vec4(-408.6989, -2836.5591, 6.0004, 315.1499),
                 spawn = vec4(-408.6989, -2836.5591, 6.0004, 315.1499),
+                type = 'car'
+            }
+        }
+    },
+    ['bus'] = {
+        ped = {
+            model = 'csb_trafficwarden',
+            task = 'WORLD_HUMAN_STAND_MOBILE_UPRIGHT'
+        },
+        locations = {
+            ['bus_deposit'] = {
+                blip = {
+                    label = locale('bus_deposit'),
+                    sprite = 616,
+                    scale = 0.8,
+                    colour = 47
+                },
+                access = vec4(412.9099, -633.6835, 28.5000, 179.0364),
+                store = vec4(423.4206, -622.7843, 28.4999, 338.1965),
+                spawn = vec4(423.4206, -622.7843, 28.4999, 338.1965),
                 type = 'car'
             }
         }
@@ -232,6 +256,13 @@ Config.JobGarajes = {
 }
 
 Config.Garages = {
+    ['cityhall'] = {
+        access = vec4(-324.9214, -961.9797, 31.0806, 249.7910),
+        store = vec4(-310.0342, -933.3864, 31.0806, 244.1133),
+        spawn = vec4(-303.8788, -979.2865, 31.0806, 249.4251),
+        type = 'car',
+        blip = true
+    },
     ['elgin'] = {
         access = vec4(214.5288, -807.0486, 30.8031, 342.1742),
         store = vec4(216.8447, -786.5744, 30.8161, 340.5844),
@@ -314,4 +345,9 @@ Config.Impounds = {
         type = 'plane',
         blip = true
     },
+}
+
+-- Give a first car to the player
+Config.FirstCar = {
+    model = 'blista',
 }

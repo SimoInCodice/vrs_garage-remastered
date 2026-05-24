@@ -216,6 +216,10 @@ lib.callback.register('vrs_garage:setPlayerRoutingBucket', function(source, buck
     return true
 end)
 
+RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
+    
+end)
+
 function CustomSQL(type, action, placeholder)
     local result = nil
     if Config.MySQL == 'oxmysql' then
@@ -259,3 +263,79 @@ if Config.ImpoundCommandEnabled then
     })    
 end
 ]]
+
+RegisterCommand('autogratis', function(source)
+    local player = exports.qbx_core:GetPlayer(source)
+    
+    if player then
+        local result = CustomSQL('query', [[
+            SELECT * FROM player_vehicles WHERE citizenid = ? AND plate = ?]], {
+            player.PlayerData.citizenid,
+            player.PlayerData.citizenid
+        })
+
+        if result and #result > 0 then
+            print("^1[DEBUG]^7 Il giocatore ha già un veicolo assegnato, non assegniamo un'auto gratuita.")
+            exports.qbx_core:Notify(source, "Hai già ricevuto l'auto gratis", "error")
+            return
+        end
+
+        -- Controlliamo il metadato 'isnew' (o 'newbie' a seconda della versione)
+        -- Di default, alla creazione del personaggio è true
+        --if player.PlayerData.metadata['isnew'] or player.PlayerData.metadata['newbie'] then
+            
+        print("^2[INFO]^7 Nuovo personaggio rilevato: " .. player.PlayerData.citizenid)
+        
+        local citizenid = player.PlayerData.citizenid -- Il CID del nuovo personaggio
+        local vehicleModel = Config.FirstCar.model       -- Modello dell'auto (usa le backtick o GetHashKey)
+        local plate = citizenid -- Genera una targa semplice
+        
+        print(string.format("^2[INFO]^7 Assegnando veicolo %s con targa %s a citizenid %s", vehicleModel, plate, citizenid))
+
+        -- Definiamo le proprietà del veicolo (colore, modifiche, ecc.)
+        -- Qbox usa solitamente qbx_vehiclekeys o script simili per le chiavi
+        local vehicleProps = {
+            model = vehicleModel,
+            plate = plate,
+        }
+        -- Save vehicle in database
+        CustomSQL('insert', [[
+            INSERT INTO player_vehicles(license, citizenid, vehicle, hash, mods, plate, state)
+            VALUES (?, ?, ?, ?, ?, ?, ?)]], {
+            player.PlayerData.license,
+            citizenid,
+            Config.FirstCar.model, -- Nome del modello come stringa
+            vehicleModel, -- Hash del modello
+            json.encode(vehicleProps),
+            plate,
+            0
+        })
+
+        local coords = GetEntityCoords(GetPlayerPed(source))
+        
+        local vehicle = QBCore.Functions.SpawnVehicle(source, vehicleProps.model, coords, true, function (veh)
+            SetEntityHeading(veh, coords.w) -- Set heading
+            TaskWarpPedIntoVehicle(GetPlayerPed(source), veh, -1) -- Put player in seat
+            TriggerClientEvent('qb-vehiclekeys:client:AddKeys', source, vehicleProps.plate)
+            --TriggerServerEvent('qb-vehiclekeys:server:AcquireVehicleKeys', source, vehicleProps.plate)
+            --TriggerEvent("qb-vehiclekeys:server:GiveVehicleKeys", source, vehicleProps.plate) -- Set keys
+            SetVehicleEngineOn(veh, true, true)
+        end)
+
+        SetVehicleNumberPlateText(vehicle, vehicleProps.plate)
+            
+        Entity(vehicle).state.plate = vehicleProps.plate
+        
+        --[[
+        Inseriamo l'auto nel database dei veicoli posseduti
+        Nota: Assicurati che il nome della tabella sia 'player_vehicles' (default QB/QBX)
+        ]]
+        
+        print("^2[Auto Iniziale]^7 Veicolo assegnato a " .. citizenid .. " con targa: " .. plate)
+                
+        -- Opzionale: Notifica il giocatore
+        exports.qbx_core:Notify(source, "Hai ricevuto una " .. Config.FirstCar.model .. " come regalo di benvenuto! La trovi nel garage centrale.", "success")
+        
+        print("^2[INFO]^7 Metadati aggiornati, regalo consegnato.")
+    end
+end, false)
